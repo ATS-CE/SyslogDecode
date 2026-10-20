@@ -217,3 +217,31 @@ Parsed ist weiterhin kein vollständiger RFC-Konformitätsnachweis.
 Normative Grundlage: https://www.rfc-editor.org/rfc/rfc5424.html, Abschnitte 6,
 6.2, 6.3 und 7.2.2. Frühere Tabellen dieses Dokuments beschreiben den ursprünglichen
 Reviewstand; die oben genannten Grammatikabweichungen sind mit Schritt 2 korrigiert.
+
+## Schritt 3 – Bytegenaue UTF-8- und BOM-Prüfung
+
+RFC-5424-PARAM-VALUE wird bei Datagrammen anhand der Originalbytes auf gültiges,
+kürzestes UTF-8 geprüft. Fehlerhafte Werte werden nicht als Ersatzzeichen interpretiert;
+das betroffene SD-Element wird nicht übernommen. Vollständige vorherige Elemente bleiben.
+Die Prüfung akzeptiert Unicode-Skalare einschließlich Steuerzeichen und U+FFFD.
+
+MSG wird anhand seines tatsächlichen Anfangs unterschieden: EF BB BF kennzeichnet
+UTF-8, das streng geprüft wird. Bei Fehlern bleibt Message null, während MessageBytes
+und Source.RawData erhalten bleiben. Ohne BOM ist MSG-ANY zulässig; Message ist hier
+nur die bisherige UTF-8-Anzeigeansicht, keine Aussage über die tatsächliche Kodierung.
+MessageEncoding kennzeichnet dies als Unspecified. Ein weiterer BOM innerhalb des MSG
+ist Nutzinhalt. Ein BOM vor PRI wird bei Datagrammen nicht mehr stillschweigend entfernt.
+
+MessageBytes ist eine Ansicht auf die bereits besessenen Datagrammbytes einschließlich
+BOM, ohne zusätzliche Kopie. HasMessageBytes unterscheidet ein vorhandenes leeres MSG
+von fehlendem MSG bzw. Stringeingaben. BytePosition in Diagnosen bezeichnet den absoluten
+Byteoffset im Datagramm; Position bleibt ein separater optionaler UTF-16-Index.
+Bei Stringeingaben werden unpaarige Surrogate diagnostiziert, aber keine ursprüngliche
+Bytekodierung behauptet (TextOnly). Die bisherige BOM-Textkompatibilität bleibt erhalten.
+Die Parseransicht von Datagrammen stammt aus den Originalbytes und bleibt unabhängig von
+nachträglichen Änderungen am öffentlichen Message-Anzeigefeld.
+
+Neun Testmethoden prüfen gültiges Unicode, Überlängen, Surrogate, ungültige Startbytes,
+abgeschnittene Sequenzen, BOM-Position, MSG-ANY, Byteoffsets und Textkompatibilität.
+Grundlage: RFC 5424 Abschnitte 6, 6.3.3 und 6.4 sowie RFC 3629. Die übrigen
+RFC-3164-/Collector-Prüfungen bleiben separat; Parsed ist kein Konformitätszertifikat.

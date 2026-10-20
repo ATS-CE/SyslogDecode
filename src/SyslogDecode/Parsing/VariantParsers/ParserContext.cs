@@ -7,6 +7,7 @@
 namespace SyslogDecode.Parsing
 {
     using SyslogDecode.Common;
+    using System;
     using SyslogDecode.Model;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -29,8 +30,17 @@ namespace SyslogDecode.Parsing
         public ParserContext(RawSyslogMessage msg)
         {
             if (msg == null) throw new System.ArgumentNullException(nameof(msg));
-            Text = (msg.Message ?? string.Empty).CutOffBOM();
+            Text = msg.HasRawData ? msg.DatagramText : (msg.Message ?? string.Empty).CutOffBOM();
             ParsedMessage = new ParsedSyslogMessage(msg);
+        }
+
+        private int byteCursor, textCursor;
+        internal int RawByteOffset(int textPosition)
+        {
+            // Called in source order, only across already validated UTF-8 prefixes.
+            byteCursor += System.Text.Encoding.UTF8.GetByteCount(Text.AsSpan(textCursor, textPosition - textCursor));
+            textCursor = textPosition;
+            return byteCursor;
         }
 
         public void AddError(string message, string code = "ParserError", string stage = "Parsing")

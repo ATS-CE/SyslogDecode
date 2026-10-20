@@ -44,6 +44,10 @@ namespace SyslogDecode.Model
         public Severity Severity;
         public SyslogHeader Header;
         public string Message;
+        public MessageEncodingStatus MessageEncoding { get; internal set; }
+        /// <summary>Exact RFC 5424 MSG bytes including BOM. HasMessageBytes distinguishes absent/text input.</summary>
+        public ReadOnlyMemory<byte> MessageBytes { get; internal set; }
+        public bool HasMessageBytes { get; internal set; }
 
         /// <summary>The StructuredData element for entries following RFC-5424 spec. It is a list of named elements, 
         /// each having a list of name-value pairs. </summary>

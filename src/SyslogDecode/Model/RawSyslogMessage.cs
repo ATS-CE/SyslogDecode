@@ -29,6 +29,7 @@ namespace SyslogDecode.Model
         /// Empty bytes with HasRawData=true represent a received zero-length datagram.</summary>
         public ReadOnlyMemory<byte> RawData { get; private set; }
         public bool HasRawData { get; private set; }
+        internal string DatagramText { get; private set; }
 
         /// <summary>Copies a datagram before the caller can reuse its buffer. Message is only a
         /// UTF-8 display/legacy parsing view; RawData is authoritative, including invalid UTF-8.</summary>
@@ -36,11 +37,12 @@ namespace SyslogDecode.Model
             IPAddress sourceIpAddress = null, int? sourcePort = null)
         {
             var owned = bytes.ToArray();
+            var text = Encoding.UTF8.GetString(owned);
             return new RawSyslogMessage
             {
                 RawData = owned, HasRawData = true, ReceivedOn = receivedOn,
                 SourceIpAddress = sourceIpAddress, SourcePort = sourcePort,
-                Message = Encoding.UTF8.GetString(owned)
+                Message = text, DatagramText = text
             };
         }
     }

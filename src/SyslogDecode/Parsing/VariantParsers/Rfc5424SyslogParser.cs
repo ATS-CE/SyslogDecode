@@ -50,11 +50,11 @@ namespace SyslogDecode.Parsing
             entry.Header.MsgId = Nil(id);
 
             if (!ReadStructuredData(ctx)) return false;
-            if (ctx.Eof()) { entry.Message = null; return true; }
+            if (ctx.Eof()) { entry.Message = null; entry.MessageEncoding = MessageEncodingStatus.Absent; return true; }
             if (ctx.Current != ' ')
                 return Fail(ctx, "InvalidDelimiter", "MSG", ctx.Position, "Expected one SP before MSG.");
             ctx.Position++;
-            entry.Message = ctx.Text.Substring(ctx.Position).CutOffBOM();
+            Rfc5424Encoding.ReadMessage(ctx);
             return true;
         }
 
@@ -163,12 +163,14 @@ namespace SyslogDecode.Parsing
                 return Fail(ctx, "InvalidDelimiter", "PARAM-VALUE", ctx.Position, "Expected opening quote immediately after '='.");
             ctx.Position++;
             int start = ctx.Position;
+            int valueStart = start;
             StringBuilder builder = null;
             while (!ctx.Eof())
             {
                 char ch = ctx.Current;
                 if (ch == '"')
                 {
+                    if (!Rfc5424Encoding.ValidateParameter(ctx, valueStart, ctx.Position)) return false;
                     value = builder == null ? ctx.Text.Substring(start, ctx.Position - start)
                         : builder.Append(ctx.Text, start, ctx.Position - start).ToString();
                     ctx.Position++;

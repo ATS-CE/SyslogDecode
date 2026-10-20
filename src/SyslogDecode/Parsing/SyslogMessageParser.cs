@@ -66,7 +66,7 @@ namespace SyslogDecode.Parsing
         internal void Parse(ParserContext context)
         {
             var entry = context.ParsedMessage;
-            if (string.IsNullOrEmpty(entry.Source.Message))
+            if (string.IsNullOrEmpty(context.Text))
             {
                 entry.Message = entry.Source.Message;
                 context.AddError("Missing or empty input.", "EmptyInput", "Input");
