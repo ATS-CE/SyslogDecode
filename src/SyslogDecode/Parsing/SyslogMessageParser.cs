@@ -82,13 +82,13 @@ namespace SyslogDecode.Parsing
             }
             context.AssignFacilitySeverity();
             entry.HasPriority = true;
-            // A recognizable version-1 envelope must not fall through to another format on failure.
-            bool version1 = context.Text.AsSpan(context.Position).StartsWith("1 ".AsSpan(), StringComparison.Ordinal);
-            if (version1) entry.PayloadType = PayloadType.Rfc5424;
+            // A recognizable numeric version envelope must not fall through to another format on failure.
+            bool versioned = Rfc5424SyslogParser.HasVersionPrefix(context);
+            if (versioned) entry.PayloadType = PayloadType.Rfc5424;
 
             foreach (var parser in VariantParsers)
             {
-                if (version1 && !(parser is Rfc5424SyslogParser)) continue;
+                if (versioned && !(parser is Rfc5424SyslogParser)) continue;
                 context.Reset();
                 int errorsBefore = entry.ErrorMessages.Count;
                 bool matched;
@@ -122,7 +122,7 @@ namespace SyslogDecode.Parsing
                         : entry.PayloadType == PayloadType.PlainText ? ParseStatus.Unrecognized : ParseStatus.Parsed;
                     return;
                 }
-                if (version1 || entry.ErrorMessages.Count > errorsBefore || entry.PayloadType != PayloadType.NotSyslog)
+                if (versioned || entry.ErrorMessages.Count > errorsBefore || entry.PayloadType != PayloadType.NotSyslog)
                 {
                     if (entry.ErrorMessages.Count == errorsBefore)
                         context.AddError("Recognized format could not be parsed.", "IncompleteMessage", "Parsing");
@@ -132,6 +132,8 @@ namespace SyslogDecode.Parsing
                 // A non-matching parser is speculative: discard any tentative fields.
                 entry.Header ??= new SyslogHeader();
                 entry.Header.Timestamp = null;
+                entry.Header.TimestampText = null;
+                entry.Header.Version = null;
                 entry.Header.HostName = null;
                 entry.Header.AppName = null;
                 entry.Header.ProcId = null;

@@ -186,3 +186,34 @@ oder für fehlerhafte nachgelagerte Observer.
 Neue Tests: Originalbytes einschließlich BOM/ungültigem UTF-8/NUL, Datenbesitz nach Pufferänderung,
 Senderdaten, leere Datagramme, Textkompatibilität, Fehlerstatus, keine Formatumdeutung,
 keine spekulativen Feldreste, Legacy-Diagnosen und Stream-Ausgabe nach Parser-Ausnahmen.
+
+## Schritt 2 – RFC-5424-Textgrammatik
+
+Headerfelder werden auf PRINTUSASCII, maximale Feldlänge und genau einen SP als
+Trennzeichen geprüft. Numerische Versionskandidaten werden nicht als anderes Format
+umgedeutet; nur Version 1 wird unterstützt. VERSION und der originale TIMESTAMP-Text
+stehen zusätzlich im Header. Diagnosen enthalten jetzt optional den Feldnamen.
+
+Zeitstempel werden einschließlich Kalenderdatum, Großschreibung von T/Z, Sekunden
+0..59, 1..6 Nachkommastellen und numerischem Offset geprüft. UTC-Umrechnung erfolgt
+auch für syntaktisch zulässige Offsets außerhalb von DateTimeOffsets 14-Stunden-Grenze.
+Jahr 0000 und UTC-Werte außerhalb des DateTime-Bereichs erzeugen TimestampOutOfRange;
+der Originaltext bleibt erhalten. -00:00 bleibt im Originaltext unterscheidbar.
+Ungültige Zeitstempel erlauben die weitere Extraktion (ParsedWithErrors), fehlerhafte
+Feldgrenzen oder Structured Data brechen mit Failed ab.
+
+Structured Data prüft Namen, Trennzeichen, Anführungszeichen, Escape-Regeln und doppelte
+SD-IDs. Unbekannte Escapes bleiben unverändert, wiederholte Parameternamen bleiben
+zulässig. Nur vollständige Elemente werden übernommen; bereits vollständige Elemente
+bleiben bei einem späteren Fehler erhalten. Private SD-IDs werden auf eine dezimale
+Enterprise-Suffixsyntax einschließlich punktgetrennter Unterkennungen geprüft.
+Registry-Zugehörigkeit und Eigentümerschaft werden nicht behauptet oder online geprüft.
+
+15 zusätzliche Testmethoden decken Headergrenzen, Trunkierung, Zeitstempel, SD-Namen,
+Escapes, Duplikate und diagnostizierte Positionen ab. Die CI führt sie zusätzlich zu
+den bisherigen Tests aus. Bytebezogene UTF-8-/BOM-Prüfung folgt in Schritt 3;
+Parsed ist weiterhin kein vollständiger RFC-Konformitätsnachweis.
+
+Normative Grundlage: https://www.rfc-editor.org/rfc/rfc5424.html, Abschnitte 6,
+6.2, 6.3 und 7.2.2. Frühere Tabellen dieses Dokuments beschreiben den ursprünglichen
+Reviewstand; die oben genannten Grammatikabweichungen sind mit Schritt 2 korrigiert.

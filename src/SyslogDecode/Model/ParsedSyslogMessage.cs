@@ -94,6 +94,9 @@ namespace SyslogDecode.Model
 
     public class SyslogHeader
     {
+        public int? Version;
+        /// <summary>Original RFC 5424 timestamp token, including NIL or an unknown -00:00 offset.</summary>
+        public string TimestampText;
         public DateTime? Timestamp; 
         public string HostName;
         public string AppName;

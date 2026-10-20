@@ -80,7 +80,7 @@ namespace SyslogDecode.Tests
             const string text = "<34>1 - h a - id [a@1 p=\"unterminated";
             var result = Parse(text);
             Assert.AreEqual(PayloadType.Rfc5424, result.PayloadType);
-            Assert.AreEqual(ParseStatus.ParsedWithErrors, result.ParseStatus);
+            Assert.AreEqual(ParseStatus.Failed, result.ParseStatus);
             Assert.AreEqual(ValidationStatus.ErrorsDetected, result.ValidationStatus);
             Assert.IsTrue(result.Diagnostics.Count > 0);
             Assert.AreEqual("h", result.Header.HostName);
