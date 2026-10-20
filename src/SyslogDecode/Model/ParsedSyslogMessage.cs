@@ -15,7 +15,31 @@ namespace SyslogDecode.Model
     [DebuggerDisplay("{Header}")]
     public class ParsedSyslogMessage
     {
+        /// <summary>Detected format; it does not imply RFC validity.</summary>
         public PayloadType PayloadType;
+        public ParseStatus ParseStatus { get; internal set; }
+        public ValidationStatus ValidationStatus { get; internal set; }
+        /// <summary>Whether Facility/Severity came from a successfully decoded PRI.</summary>
+        public bool HasPriority { get; internal set; }
+        public IReadOnlyList<ParseDiagnostic> Diagnostics => _diagnostics;
+        private readonly List<ParseDiagnostic> _diagnostics = new List<ParseDiagnostic>();
+
+        internal void RecordDiagnostic(ParseDiagnostic diagnostic)
+        {
+            ImportLegacyDiagnostics(_diagnostics.Count);
+            _diagnostics.Add(diagnostic);
+            ErrorMessages.Add(diagnostic.Position.HasValue
+                ? $"{diagnostic.Message} (near {diagnostic.Position.Value})" : diagnostic.Message);
+            ValidationStatus = ValidationStatus.ErrorsDetected;
+        }
+
+        // Older/custom parsers may still write to the public ErrorMessages list directly.
+        internal void ImportLegacyDiagnostics(int start)
+        {
+            for (int i = start; i < ErrorMessages.Count; i++)
+                _diagnostics.Add(new ParseDiagnostic("LegacyParserError", "Parsing", null, ErrorMessages[i]));
+            if (ErrorMessages.Count > 0) ValidationStatus = ValidationStatus.ErrorsDetected;
+        }
         public Facility Facility;
         public Severity Severity;
         public SyslogHeader Header;

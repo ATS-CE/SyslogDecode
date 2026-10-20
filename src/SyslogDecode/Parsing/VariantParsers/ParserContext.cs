@@ -28,13 +28,14 @@ namespace SyslogDecode.Parsing
 
         public ParserContext(RawSyslogMessage msg)
         {
-            Text = msg.Message.CutOffBOM();
+            if (msg == null) throw new System.ArgumentNullException(nameof(msg));
+            Text = (msg.Message ?? string.Empty).CutOffBOM();
             ParsedMessage = new ParsedSyslogMessage(msg);
         }
 
-        public void AddError(string message)
+        public void AddError(string message, string code = "ParserError", string stage = "Parsing")
         {
-            ErrorMessages.Add($"{message} (near {this.Position})");
+            ParsedMessage.RecordDiagnostic(new ParseDiagnostic(code, stage, Position, message));
         }
 
 

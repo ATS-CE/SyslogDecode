@@ -137,3 +137,52 @@ Ergebnisse werden nach Build und Testlauf unten ergänzt. Windows-spezifische Te
   Sie decken PRI-Grenzen, NIL-Zeitstempel, MSG-Leerzeichen/BOM, SD-Escapes/Fehler/wiederholte Parameter,
   Dictionary-Zusammenführung, NIL-Serialisierung, BSD-Jahreswechsel sowie UDP-Pufferwiederverwendung ab.
 - Windows-Build, Windows-UDP-Verhalten und PCAPNG-Verarbeitung mit Tx.Network bleiben praktisch zu verifizieren.
+
+
+## Schritt 1: Rohdatenerhalt und Verarbeitungsstatus
+
+`RawSyslogMessage.FromDatagram` übernimmt eine eigene Kopie der Originalbytes in `RawData`.
+Der UDP-Listener setzt zusätzlich `HasRawData`, `ReceivedOn`, `SourceIpAddress` und `SourcePort`.
+Ein leeres Datagramm hat `HasRawData=true` und null Bytes. Bei alten, ausschließlich als String
+übergebenen Nachrichten bleibt `HasRawData=false`; Originalbytes werden nicht durch erneutes
+Kodieren vorgetäuscht. `Message` bleibt die bisherige UTF-8-Ansicht; bei ungültigen Bytefolgen
+ist ausschließlich `RawData` verlustfrei. Vollständige feldbezogene Encodingprüfung folgt in Schritt 3.
+
+Die Rohdatenkopie benötigt pro Datagramm ein eigenes Bytearray. Die vorherige Optimierung
+"kein Bytearray je Nachricht" gilt damit nicht mehr; der Socket-Puffer selbst wird weiterverwendet.
+Diese Kosten sind für die unbegrenzt von Aufrufern aufbewahrbaren Nachrichten bewusst akzeptiert.
+Die Speicherlebensdauer wird nicht durch Pool-Rückgaben oder Dispose-Pflichten eingeschränkt.
+
+| Eigenschaft | Bedeutung |
+|---|---|
+| `PayloadType` | Erkanntes Format, ausdrücklich kein Konformitätsnachweis |
+| `HasPriority` | Facility/Severity wurden aus einer gültigen PRI gelesen; sonst sind die Enum-Standardwerte bedeutungslos |
+| `ParseStatus.NotParsed` | Ergebnis wurde noch nicht durch den zentralen Parser verarbeitet |
+| `ParseStatus.Parsed` | Parser hat Felder ohne gemeldete Fehler extrahiert |
+| `ParseStatus.ParsedWithErrors` | Parser hat ein Ergebnis geliefert und dabei Fehler gemeldet |
+| `ParseStatus.Unrecognized` | Kein strukturiertes Format erkannt bzw. keine gültige PRI; Rohdaten bleiben erhalten |
+| `ParseStatus.Failed` | Verarbeitung abgebrochen, etwa bei leerem Input oder Parser-/Extractor-Ausnahme; Teildaten können enthalten sein |
+| `ValidationStatus.NotValidated` | Keine vollständige RFC-Validierung durchgeführt; auch bei Parsed |
+| `ValidationStatus.ErrorsDetected` | Mindestens ein Verarbeitungs-/Validierungsproblem bekannt |
+| `Diagnostics` | Fehlercode, Verarbeitungsphase, Meldung, optional UTF-16-Position in der Parser-Textansicht |
+
+Es gibt bewusst keinen Status "RFC-konform", solange die vollständige Prüfung noch fehlt.
+`ErrorMessages` bleibt aus Kompatibilitätsgründen vorhanden; neue Parser sollten `ctx.AddError`
+verwenden. Direkte Ergänzungen der Legacy-Liste werden übernommen; Löschen/Umsortieren dieser
+Liste während des Parsens gehört nicht zum unterstützten Erweiterungsvertrag.
+
+Ein erkanntes fehlerhaftes Format wird nicht nachträglich als fehlerfreier Plaintext umgedeutet.
+Version-1-Nachrichten werden für den RFC-5424-Parser reserviert. Ein Variant-Parser muss nach
+Erkennen seines Formats `PayloadType` setzen; `false` ohne Format/Fehler bedeutet "kein Treffer",
+und dabei vorläufig geschriebene Felder werden verworfen. Bereits erkannte fehlerhafte Nachrichten
+behalten ihre Teildaten und Fehler. Benutzerdefinierte Parser mit eigener Version-1-Syntax müssen
+von `Rfc5424SyslogParser` ableiten oder die zentrale Erkennung gesondert anpassen.
+
+Parser- und Extractor-Ausnahmen werden als Failed-Ergebnis ausgegeben, sodass der Stream die
+betroffene Nachricht weiterreichen kann. Ressourcen-/Prozessfehler wie OutOfMemoryException
+werden nicht in normale Nachrichtenfehler umgewandelt. Dies ist keine Zustellgarantie für UDP
+oder für fehlerhafte nachgelagerte Observer.
+
+Neue Tests: Originalbytes einschließlich BOM/ungültigem UTF-8/NUL, Datenbesitz nach Pufferänderung,
+Senderdaten, leere Datagramme, Textkompatibilität, Fehlerstatus, keine Formatumdeutung,
+keine spekulativen Feldreste, Legacy-Diagnosen und Stream-Ausgabe nach Parser-Ausnahmen.

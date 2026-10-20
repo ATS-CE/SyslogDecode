@@ -88,13 +88,14 @@ namespace SyslogDecode.Udp
                 var socket = PortListener.Client;
                 EndPoint remoteIp = new IPEndPoint(
                     socket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
-                // One reusable buffer per receiver, instead of UdpClient.Receive's array per packet.
+                // Reusable socket buffer. Each message takes an owned copy for durable raw data.
                 var bytes = new byte[65536];
                 while (_running)
                 {
                     int length = socket.ReceiveFrom(bytes, 0, bytes.Length, SocketFlags.None, ref remoteIp);
-                    var message = Encoding.UTF8.GetString(bytes, 0, length); // See notes on encoding at the end of this file
-                    var msg = new RawSyslogMessage() { ReceivedOn = DateTime.UtcNow, SourceIpAddress = ((IPEndPoint)remoteIp).Address, Message = message };
+                    var sender = (IPEndPoint)remoteIp;
+                    var msg = RawSyslogMessage.FromDatagram(bytes.AsSpan(0, length),
+                        DateTime.UtcNow, sender.Address, sender.Port);
                     Interlocked.Increment(ref _packetCount);
                     InputEpsCounter.Add(1); 
                     Broadcast(msg);

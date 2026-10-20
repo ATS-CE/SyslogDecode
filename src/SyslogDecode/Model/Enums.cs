@@ -13,7 +13,7 @@ namespace SyslogDecode.Model
         /// <summary>String payload is missing syslog prefix &lt;n&gt;.</summary>
         NotSyslog,
     
-        /// <summary>RFC-5424 compliant entry.</summary>
+        /// <summary>RFC-5424 format detected; consult ParseStatus and ValidationStatus.</summary>
         Rfc5424,
 
         /// <summary>Format described in RFC-3164; or close to it.</summary>

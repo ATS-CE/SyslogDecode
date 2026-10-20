@@ -65,29 +65,85 @@ namespace SyslogDecode.Parsing
 
         internal void Parse(ParserContext context)
         {
-            if (!context.ReadSyslogPrefix())
+            var entry = context.ParsedMessage;
+            if (string.IsNullOrEmpty(entry.Source.Message))
+            {
+                entry.Message = entry.Source.Message;
+                context.AddError("Missing or empty input.", "EmptyInput", "Input");
+                entry.ParseStatus = ParseStatus.Failed;
                 return;
+            }
+            if (!context.ReadSyslogPrefix())
+            {
+                entry.Message = entry.Source.Message;
+                context.AddError("Missing or invalid PRI; original input retained.", "InvalidPriority", "Priority");
+                entry.ParseStatus = ParseStatus.Unrecognized;
+                return;
+            }
             context.AssignFacilitySeverity();
+            entry.HasPriority = true;
+            // A recognizable version-1 envelope must not fall through to another format on failure.
+            bool version1 = context.Text.AsSpan(context.Position).StartsWith("1 ".AsSpan(), StringComparison.Ordinal);
+            if (version1) entry.PayloadType = PayloadType.Rfc5424;
 
             foreach (var parser in VariantParsers)
             {
-                context.Reset(); 
+                if (version1 && !(parser is Rfc5424SyslogParser)) continue;
+                context.Reset();
+                int errorsBefore = entry.ErrorMessages.Count;
+                bool matched;
                 try
                 {
-                    if (parser.TryParse(context))
+                    matched = parser.TryParse(context);
+                }
+                catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is AccessViolationException))
+                {
+                    context.AddError(ex.Message, "ParserException", "Parsing");
+                    entry.ParseStatus = ParseStatus.Failed;
+                    return;
+                }
+                // Synchronize legacy diagnostics only when the extension bypassed AddError.
+                entry.ImportLegacyDiagnostics(entry.Diagnostics.Count);
+                if (matched)
+                {
+                    try
                     {
                         ExtractDataFromMessage(context);
-                        BuildAllDataDictionary(context.ParsedMessage); // put all parsed/extracted data into AllData dictionary
-                        return; 
+                        BuildAllDataDictionary(entry);
                     }
+                    catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is AccessViolationException))
+                    {
+                        context.AddError(ex.Message, "ExtractionException", "Extraction");
+                        entry.ParseStatus = ParseStatus.Failed;
+                        return;
+                    }
+                    entry.ImportLegacyDiagnostics(entry.Diagnostics.Count);
+                    entry.ParseStatus = entry.ErrorMessages.Count > 0 ? ParseStatus.ParsedWithErrors
+                        : entry.PayloadType == PayloadType.PlainText ? ParseStatus.Unrecognized : ParseStatus.Parsed;
+                    return;
                 }
-                catch (Exception ex)
+                if (version1 || entry.ErrorMessages.Count > errorsBefore || entry.PayloadType != PayloadType.NotSyslog)
                 {
-                    context.ErrorMessages.Add(ex.ToString() + " message: " + context.Text);
-                    ex.Data["SyslogMessage"] = context.Text;
-                    throw; 
+                    if (entry.ErrorMessages.Count == errorsBefore)
+                        context.AddError("Recognized format could not be parsed.", "IncompleteMessage", "Parsing");
+                    entry.ParseStatus = ParseStatus.Failed;
+                    return;
                 }
+                // A non-matching parser is speculative: discard any tentative fields.
+                entry.Header ??= new SyslogHeader();
+                entry.Header.Timestamp = null;
+                entry.Header.HostName = null;
+                entry.Header.AppName = null;
+                entry.Header.ProcId = null;
+                entry.Header.MsgId = null;
+                entry.Message = null;
+                entry.StructuredData5424.Clear();
+                entry.ExtractedTuples.Clear();
+                entry.Data.Clear();
             }
+            entry.Message = entry.Source.Message;
+            context.AddError("No configured parser accepted the message.", "NoMatchingParser", "Detection");
+            entry.ParseStatus = ParseStatus.Unrecognized;
         }
 
         private void ExtractDataFromMessage(ParserContext ctx)
