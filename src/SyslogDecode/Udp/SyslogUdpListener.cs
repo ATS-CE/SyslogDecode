@@ -29,7 +29,7 @@ namespace SyslogDecode.Udp
         public event EventHandler<ItemEventArgs<RawSyslogMessage>> Received; 
 
         private Thread _thread; 
-        private bool _running;
+        private volatile bool _running;
         private long _packetCount;
         private bool _disposeClientOnDispose;
 
@@ -76,8 +76,8 @@ namespace SyslogDecode.Udp
                 return;
             while (GetUdpBufferBytesAvailable() > 0)
                 Thread.Sleep(10);
-            PortListener.Close();
             _running = false;
+            PortListener.Close();
             Thread.Sleep(10);
         }
 
@@ -85,12 +85,16 @@ namespace SyslogDecode.Udp
         {
             try
             {
-                var remoteIp = new IPEndPoint(IPAddress.Any, 0);
+                var socket = PortListener.Client;
+                EndPoint remoteIp = new IPEndPoint(
+                    socket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
+                // One reusable buffer per receiver, instead of UdpClient.Receive's array per packet.
+                var bytes = new byte[65536];
                 while (_running)
                 {
-                    var bytes = PortListener.Receive(ref remoteIp);
-                    var message = Encoding.UTF8.GetString(bytes); // See notes on encoding at the end of this file
-                    var msg = new RawSyslogMessage() { ReceivedOn = DateTime.UtcNow, SourceIpAddress = remoteIp.Address, Message = message };
+                    int length = socket.ReceiveFrom(bytes, 0, bytes.Length, SocketFlags.None, ref remoteIp);
+                    var message = Encoding.UTF8.GetString(bytes, 0, length); // See notes on encoding at the end of this file
+                    var msg = new RawSyslogMessage() { ReceivedOn = DateTime.UtcNow, SourceIpAddress = ((IPEndPoint)remoteIp).Address, Message = message };
                     Interlocked.Increment(ref _packetCount);
                     InputEpsCounter.Add(1); 
                     Broadcast(msg);

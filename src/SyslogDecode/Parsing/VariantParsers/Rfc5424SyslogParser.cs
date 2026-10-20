@@ -8,6 +8,7 @@ namespace SyslogDecode.Parsing
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using SyslogDecode.Model;
 
     public class Rfc5424SyslogParser: ISyslogVariantParser
@@ -64,8 +65,7 @@ namespace SyslogDecode.Parsing
             {
                 if (ctx.Current != SyslogChars.Lbr)
                 {
-                    // do not report it as an error, some messages out there are a bit malformed
-                    // ctx.AddError("Expected [ for structured data.");
+                    ctx.AddError("Expected structured data or NILVALUE.");
                     return; 
                 }
                 // start parsing elements
@@ -76,7 +76,10 @@ namespace SyslogDecode.Parsing
                     {
                         return;
                     }
-                    data[elem.Item1] = elem.Item2; 
+                    if (data.ContainsKey(elem.Item1))
+                        ctx.AddError("Duplicate structured data ID.");
+                    else
+                        data.Add(elem.Item1, elem.Item2);
                 }
 
             } catch (Exception ex)
@@ -92,15 +95,15 @@ namespace SyslogDecode.Parsing
                 return null; 
             }
             ctx.Position++;
-            var elemName = ctx.ReadWord();
+            var elemName = ReadName(ctx);
             ctx.SkipSpaces();
             var paramList = new List<NameValuePair>();
             var elem = new Tuple<string, List<NameValuePair>>(elemName, paramList);
             while (ctx.Current != SyslogChars.Rbr)
             {
-                var paramName = ctx.ReadWord();
+                var paramName = ReadName(ctx);
                 ctx.ReadSymbol('=');
-                var paramValue = ctx.ReadQuotedString();
+                var paramValue = ReadParameterValue(ctx);
                 var prm = new NameValuePair() { Name = paramName, Value = paramValue };
                 paramList.Add(prm);
                 ctx.SkipSpaces();
@@ -110,14 +113,70 @@ namespace SyslogDecode.Parsing
             return elem; 
         }
 
+        private static string ReadName(ParserContext ctx)
+        {
+            int start = ctx.Position;
+            while (!ctx.Eof())
+            {
+                char ch = ctx.Current;
+                if (ch == ' ' || ch == '=' || ch == ']') break;
+                if (ch < 33 || ch > 126 || ch == '"')
+                    throw new FormatException("Invalid structured data name.");
+                ctx.Position++;
+            }
+            int length = ctx.Position - start;
+            if (length == 0 || length > 32)
+                throw new FormatException("Structured data names must contain 1..32 characters.");
+            return ctx.Text.Substring(start, length);
+        }
+
+        private static string ReadParameterValue(ParserContext ctx)
+        {
+            ctx.ReadSymbol('"');
+            int start = ctx.Position;
+            StringBuilder builder = null;
+            while (!ctx.Eof())
+            {
+                char ch = ctx.Current;
+                if (ch == '"')
+                {
+                    string value = builder == null
+                        ? ctx.Text.Substring(start, ctx.Position - start)
+                        : builder.Append(ctx.Text, start, ctx.Position - start).ToString();
+                    ctx.Position++;
+                    return value;
+                }
+                if (ch == ']')
+                    throw new FormatException("Unescaped closing bracket in parameter value.");
+                if (ch == '\\' && ctx.Position + 1 < ctx.Text.Length)
+                {
+                    char next = ctx.Text[ctx.Position + 1];
+                    if (next == '\\' || next == '"' || next == ']')
+                    {
+                        if (builder == null) builder = new StringBuilder();
+                        builder.Append(ctx.Text, start, ctx.Position - start).Append(next);
+                        ctx.Position += 2;
+                        start = ctx.Position;
+                        continue;
+                    }
+                    // RFC 5424 section 6.3.3: preserve unknown escape sequences.
+                }
+                ctx.Position++;
+            }
+            throw new FormatException("Unterminated structured data parameter value.");
+        }
+
         private string ParseMessage(ParserContext ctx)
         {
             if (ctx.Eof())
             {
                 return null;
             }
+            if (ctx.Current != SyslogChars.Space)
+                ctx.AddError("Expected space before MSG.");
+            else
+                ctx.Position++; // Exactly one delimiter; remaining spaces belong to MSG.
             var msg = ctx.Text.Substring(ctx.Position);
-            msg = msg.TrimStart(SyslogChars.Space);
             // RFC 5424 allows BOM (byte order mark, 3 byte sequence) to precede the actual message. 
             // it will be read into the message OK, now 'msg' can contain this prefix - it is invisible
             // and will bring a lot of trouble when working with the string (ex: string comparisons are broken)

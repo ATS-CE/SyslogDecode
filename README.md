@@ -1,4 +1,8 @@
-﻿# SyslogDecode package
+# .NET 10 optimization branch
+
+See [REVIEW-DE.md](REVIEW-DE.md) for migration instructions, throughput changes, RFC 3164/5424 findings, remaining limitations and validation status. Target: native Windows UDP collector; TCP, TLS and relay behavior are out of scope.
+
+# SyslogDecode package
 
 [Syslog](https://en.wikipedia.org/wiki/Syslog) is a logging protocol widely used in the industry. Syslog uses a client-server architecture where a syslog **server** listens for and logs messages coming from clients over the network.
 

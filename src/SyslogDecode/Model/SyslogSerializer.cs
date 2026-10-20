@@ -80,7 +80,6 @@ namespace SyslogDecode.Model
             if (structuredData == null || structuredData.Count == 0)
             {
                 writer.Append(NilChar);
-                writer.Append(Space);
                 return; 
             }
 

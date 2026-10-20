@@ -128,33 +128,25 @@ namespace SyslogDecode.Parsing
         /// <param name="message"></param>
         private void BuildAllDataDictionary(ParsedSyslogMessage message)
         {
-            // ExtractedData is key-values extracted from syslog body by extractors
-            // entry.StructuredData is RFC-5424 structured data; 
-            var allTuples = new List<NameValuePair>();
-            allTuples.AddRange(message.ExtractedTuples);
-
-            // This is RFC-5424 specific data, structured in its own way - we take all parameters (kv pairs) from there
-            var structData = message.StructuredData5424;
-            if (structData != null)
-            {
-                var structDataParams = structData.SelectMany(de => de.Value).ToList();
-                allTuples.AddRange(structDataParams);
-            }
-
-            // now convert to dictionary; first group values by name
-            var groupedTuples = allTuples.GroupBy(p => p.Name, p => p.Value).ToDictionary(g => g.Key, g => g.ToArray());
-            // copy to final dictionary - keep multiple values as an array; 
-            // for single value put it as a single object (not object[1]); - except for IP addresses - these are always arrays, even if there's only one
+            // Group directly: avoid flattened lists, LINQ GroupBy and a second dictionary of arrays.
+            var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var pair in message.ExtractedTuples)
+                AddValue(groups, pair);
+            if (message.StructuredData5424 != null)
+                foreach (var element in message.StructuredData5424)
+                    foreach (var pair in element.Value)
+                        AddValue(groups, pair);
             message.Data.Clear();
-            foreach (var kv in groupedTuples)
-            {
-                if (kv.Value.Length > 1 || kv.Key == "IPv4" || kv.Key == "IPv6")
-                {
-                    message.Data[kv.Key] = kv.Value; //array
-                }
-                else
-                    message.Data[kv.Key] = kv.Value[0]; //single value
-            }
+            foreach (var group in groups)
+                message.Data[group.Key] = group.Value.Count == 1 && group.Key != "IPv4" && group.Key != "IPv6"
+                    ? (object)group.Value[0] : group.Value.ToArray();
+        }
+
+        private static void AddValue(Dictionary<string, List<string>> groups, NameValuePair pair)
+        {
+            if (!groups.TryGetValue(pair.Name, out var values))
+                groups.Add(pair.Name, values = new List<string>(1));
+            values.Add(pair.Value);
         }
 
     }

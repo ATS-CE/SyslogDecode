@@ -129,37 +129,30 @@ namespace SyslogDecode.Parsing
         /// <returns>True if prefix read correctly; otherwise, false.</returns>
         public static bool ReadSyslogPrefix(this ParserContext ctx)
         {
-            try
-            {
-                ctx.Position = 0;
-                ctx.ReadSymbol(SyslogChars.LT);
-                var digits = ctx.ReadDigits(3);
-                ctx.ReadSymbol(SyslogChars.GT);
-                ctx.Prefix = ctx.Text.Substring(0, ctx.Position);
-                return true; 
-            }
-            catch (Exception)
-            {
-                ctx.Position = 0; 
-                return false; 
-            }
+            ctx.Position = 0;
+            ctx.Prefix = null;
+            var text = ctx.Text;
+            if (text.Length < 3 || text[0] != '<')
+                return false;
+            int pos = 1, priority = 0;
+            while (pos < text.Length && pos <= 3 && text[pos] >= '0' && text[pos] <= '9')
+                priority = priority * 10 + text[pos++] - '0';
+            if (pos == 1 || pos >= text.Length || text[pos] != '>' || priority > 191 ||
+                (pos > 2 && text[1] == '0'))
+                return false;
+            ctx.Position = pos + 1;
+            ctx.Prefix = text.Substring(0, ctx.Position);
+            return true;
         }
 
         public static void AssignFacilitySeverity(this ParserContext ctx)
         {
-            
-            var priStr = ctx.Prefix.Replace("<", string.Empty).Replace(">", string.Empty).Replace("?", string.Empty); 
-            if (!int.TryParse(priStr, out var pri))
-            {
-                ctx.AddError($"Invalid priiority value '{priStr}', expected '<?>' where ? is int.");
-                return;
-            }
-
-            // parse priority -> facility + severity
-            var intFacility = pri / 8;
-            var intSeverity = pri % 8;
-            ctx.ParsedMessage.Facility = (Facility)intFacility;
-            ctx.ParsedMessage.Severity = (Severity)intSeverity;
+            // Prefix has already been validated. No Replace/temporary numeric strings.
+            int priority = 0;
+            for (int i = 1; i < ctx.Prefix.Length - 1; i++)
+                priority = priority * 10 + ctx.Prefix[i] - '0';
+            ctx.ParsedMessage.Facility = (Facility)(priority / 8);
+            ctx.ParsedMessage.Severity = (Severity)(priority % 8);
         }
 
         public static bool Reset(this ParserContext ctx)
@@ -177,8 +170,7 @@ namespace SyslogDecode.Parsing
         {
             if (ctx.Position + token.Length > ctx.Text.Length)
                 return false; 
-            var str = ctx.Text.Substring(ctx.Position, token.Length);
-            if(str.Equals(token, comparison))
+            if (string.Compare(ctx.Text, ctx.Position, token, 0, token.Length, comparison) == 0)
             {
                 ctx.Position += token.Length;
                 return true;

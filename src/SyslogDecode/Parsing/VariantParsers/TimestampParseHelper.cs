@@ -20,13 +20,47 @@ namespace SyslogDecode.Parsing
         {
             try
             {
-                return TryParseTimestampImpl(ctx); 
+                return TryParseBsdTimestamp(ctx) || TryParseTimestampImpl(ctx);
             }
             catch (Exception)
             {
                 // ctx.ErrorMessages.Add(ex.ToString());
                 return false;
             }
+        }
+
+        private static bool TryParseBsdTimestamp(ParserContext ctx)
+        {
+            // Fast path for the fixed-width RFC 3164 timestamp. Keep vendor fallback below.
+            int p = ctx.Position;
+            var text = ctx.Text;
+            if (text.Length - p < 16 || text[p + 3] != ' ' || text[p + 6] != ' ' ||
+                text[p + 9] != ':' || text[p + 12] != ':' || text[p + 15] != ' ')
+                return false;
+            const string months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+            int month = 0;
+            for (int i = 0; i < 12; i++)
+                if (string.CompareOrdinal(text, p, months, i * 3, 3) == 0) { month = i + 1; break; }
+            int day = text[p + 4] == ' ' ? Digit(text[p + 5]) : Pair(text, p + 4);
+            int hour = Pair(text, p + 7), minute = Pair(text, p + 10), second = Pair(text, p + 13);
+            var received = ctx.ParsedMessage.Source.ReceivedOn;
+            if (received == default(DateTime)) received = DateTime.UtcNow;
+            int year = received.Year;
+            if (received.Month == 1 && month == 12) year--;
+            if (year < 1 || month == 0 || day < 1 || day > DateTime.DaysInMonth(year, month) ||
+                hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59)
+                return false;
+            // Compatibility: original parser assumes UTC if no zone is supplied.
+            ctx.ParsedMessage.Header.Timestamp = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
+            ctx.Position = p + 16;
+            return true;
+        }
+
+        private static int Digit(char ch) => ch >= '0' && ch <= '9' ? ch - '0' : -1;
+        private static int Pair(string text, int p)
+        {
+            int a = Digit(text[p]), b = Digit(text[p + 1]);
+            return a < 0 || b < 0 ? -1 : a * 10 + b;
         }
 
         private static bool TryParseTimestampImpl(ParserContext ctx)
@@ -65,7 +99,7 @@ namespace SyslogDecode.Parsing
         public static DateTime? ParseStandardTimestamp(this ParserContext ctx)
         {
             var ts = ctx.ReadWord();
-            if (ts == null)
+            if (ts == null || ts == "-")
             {
                 return null;
             }
@@ -208,7 +242,7 @@ namespace SyslogDecode.Parsing
             var now = DateTime.UtcNow;
             var year = now.Year;
             // If it is Jan, but entry's month is Dec, then it was previous year
-            if (month == "Dec" && now.Month == 0)
+            if (string.Equals(month, "Dec", StringComparison.OrdinalIgnoreCase) && now.Month == 1)
             {
                 year--;
             }
