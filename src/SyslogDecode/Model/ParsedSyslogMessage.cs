@@ -15,11 +15,40 @@ namespace SyslogDecode.Model
     [DebuggerDisplay("{Header}")]
     public class ParsedSyslogMessage
     {
+        /// <summary>Detected format; it does not imply RFC validity.</summary>
         public PayloadType PayloadType;
+        public ParseStatus ParseStatus { get; internal set; }
+        public ValidationStatus ValidationStatus { get; internal set; }
+        /// <summary>Whether Facility/Severity came from a successfully decoded PRI.</summary>
+        public bool HasPriority { get; internal set; }
+        public IReadOnlyList<ParseDiagnostic> Diagnostics => _diagnostics;
+        private readonly List<ParseDiagnostic> _diagnostics = new List<ParseDiagnostic>();
+
+        internal void RecordDiagnostic(ParseDiagnostic diagnostic)
+        {
+            ImportLegacyDiagnostics(_diagnostics.Count);
+            _diagnostics.Add(diagnostic);
+            ErrorMessages.Add(diagnostic.Position.HasValue
+                ? $"{diagnostic.Message} (near {diagnostic.Position.Value})" : diagnostic.Message);
+            ValidationStatus = ValidationStatus.ErrorsDetected;
+        }
+
+        // Older/custom parsers may still write to the public ErrorMessages list directly.
+        internal void ImportLegacyDiagnostics(int start)
+        {
+            for (int i = start; i < ErrorMessages.Count; i++)
+                _diagnostics.Add(new ParseDiagnostic("LegacyParserError", "Parsing", null, ErrorMessages[i]));
+            if (ErrorMessages.Count > 0) ValidationStatus = ValidationStatus.ErrorsDetected;
+        }
         public Facility Facility;
         public Severity Severity;
         public SyslogHeader Header;
+        public Rfc3164Details Rfc3164 { get; internal set; }
         public string Message;
+        public MessageEncodingStatus MessageEncoding { get; internal set; }
+        /// <summary>Exact RFC 5424 MSG bytes including BOM. HasMessageBytes distinguishes absent/text input.</summary>
+        public ReadOnlyMemory<byte> MessageBytes { get; internal set; }
+        public bool HasMessageBytes { get; internal set; }
 
         /// <summary>The StructuredData element for entries following RFC-5424 spec. It is a list of named elements, 
         /// each having a list of name-value pairs. </summary>
@@ -70,6 +99,9 @@ namespace SyslogDecode.Model
 
     public class SyslogHeader
     {
+        public int? Version;
+        /// <summary>Original RFC 5424 timestamp token, including NIL or an unknown -00:00 offset.</summary>
+        public string TimestampText;
         public DateTime? Timestamp; 
         public string HostName;
         public string AppName;

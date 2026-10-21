@@ -65,29 +65,88 @@ namespace SyslogDecode.Parsing
 
         internal void Parse(ParserContext context)
         {
-            if (!context.ReadSyslogPrefix())
+            var entry = context.ParsedMessage;
+            if (string.IsNullOrEmpty(context.Text))
+            {
+                entry.Message = entry.Source.Message;
+                context.AddError("Missing or empty input.", "EmptyInput", "Input");
+                entry.ParseStatus = ParseStatus.Failed;
                 return;
+            }
+            if (!context.ReadSyslogPrefix())
+            {
+                entry.Message = entry.Source.Message;
+                context.AddError("Missing or invalid PRI; original input retained.", "InvalidPriority", "Priority");
+                entry.ParseStatus = ParseStatus.Unrecognized;
+                return;
+            }
             context.AssignFacilitySeverity();
+            entry.HasPriority = true;
+            // A recognizable numeric version envelope must not fall through to another format on failure.
+            bool versioned = Rfc5424SyslogParser.HasVersionPrefix(context);
+            if (versioned) entry.PayloadType = PayloadType.Rfc5424;
 
             foreach (var parser in VariantParsers)
             {
-                context.Reset(); 
+                if (versioned && !(parser is Rfc5424SyslogParser)) continue;
+                context.Reset();
+                int errorsBefore = entry.ErrorMessages.Count;
+                bool matched;
                 try
                 {
-                    if (parser.TryParse(context))
+                    matched = parser.TryParse(context);
+                }
+                catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is AccessViolationException))
+                {
+                    context.AddError(ex.Message, "ParserException", "Parsing");
+                    entry.ParseStatus = ParseStatus.Failed;
+                    return;
+                }
+                // Synchronize legacy diagnostics only when the extension bypassed AddError.
+                entry.ImportLegacyDiagnostics(entry.Diagnostics.Count);
+                if (matched)
+                {
+                    try
                     {
                         ExtractDataFromMessage(context);
-                        BuildAllDataDictionary(context.ParsedMessage); // put all parsed/extracted data into AllData dictionary
-                        return; 
+                        BuildAllDataDictionary(entry);
                     }
+                    catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is AccessViolationException))
+                    {
+                        context.AddError(ex.Message, "ExtractionException", "Extraction");
+                        entry.ParseStatus = ParseStatus.Failed;
+                        return;
+                    }
+                    entry.ImportLegacyDiagnostics(entry.Diagnostics.Count);
+                    entry.ParseStatus = entry.ErrorMessages.Count > 0 ? ParseStatus.ParsedWithErrors
+                        : entry.PayloadType == PayloadType.PlainText ? ParseStatus.Unrecognized : ParseStatus.Parsed;
+                    return;
                 }
-                catch (Exception ex)
+                if (versioned || entry.ErrorMessages.Count > errorsBefore || entry.PayloadType != PayloadType.NotSyslog)
                 {
-                    context.ErrorMessages.Add(ex.ToString() + " message: " + context.Text);
-                    ex.Data["SyslogMessage"] = context.Text;
-                    throw; 
+                    if (entry.ErrorMessages.Count == errorsBefore)
+                        context.AddError("Recognized format could not be parsed.", "IncompleteMessage", "Parsing");
+                    entry.ParseStatus = ParseStatus.Failed;
+                    return;
                 }
+                // A non-matching parser is speculative: discard any tentative fields.
+                entry.Header ??= new SyslogHeader();
+                entry.Rfc3164 = null;
+                entry.Header.Timestamp = null;
+                entry.Header.TimestampText = null;
+                entry.Header.Version = null;
+                entry.Header.HostName = null;
+                entry.Header.AppName = null;
+                entry.Header.ProcId = null;
+                entry.Header.MsgId = null;
+                entry.Message = null;
+                entry.StructuredData5424.Clear();
+                entry.ExtractedTuples.Clear();
+                entry.Data.Clear();
             }
+            entry.Message = entry.Source.Message;
+            context.AddError("No configured parser accepted the message.", "NoMatchingParser", "Detection");
+            entry.ParseStatus = ParseStatus.Unrecognized;
         }
 
         private void ExtractDataFromMessage(ParserContext ctx)
@@ -128,33 +187,25 @@ namespace SyslogDecode.Parsing
         /// <param name="message"></param>
         private void BuildAllDataDictionary(ParsedSyslogMessage message)
         {
-            // ExtractedData is key-values extracted from syslog body by extractors
-            // entry.StructuredData is RFC-5424 structured data; 
-            var allTuples = new List<NameValuePair>();
-            allTuples.AddRange(message.ExtractedTuples);
-
-            // This is RFC-5424 specific data, structured in its own way - we take all parameters (kv pairs) from there
-            var structData = message.StructuredData5424;
-            if (structData != null)
-            {
-                var structDataParams = structData.SelectMany(de => de.Value).ToList();
-                allTuples.AddRange(structDataParams);
-            }
-
-            // now convert to dictionary; first group values by name
-            var groupedTuples = allTuples.GroupBy(p => p.Name, p => p.Value).ToDictionary(g => g.Key, g => g.ToArray());
-            // copy to final dictionary - keep multiple values as an array; 
-            // for single value put it as a single object (not object[1]); - except for IP addresses - these are always arrays, even if there's only one
+            // Group directly: avoid flattened lists, LINQ GroupBy and a second dictionary of arrays.
+            var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var pair in message.ExtractedTuples)
+                AddValue(groups, pair);
+            if (message.StructuredData5424 != null)
+                foreach (var element in message.StructuredData5424)
+                    foreach (var pair in element.Value)
+                        AddValue(groups, pair);
             message.Data.Clear();
-            foreach (var kv in groupedTuples)
-            {
-                if (kv.Value.Length > 1 || kv.Key == "IPv4" || kv.Key == "IPv6")
-                {
-                    message.Data[kv.Key] = kv.Value; //array
-                }
-                else
-                    message.Data[kv.Key] = kv.Value[0]; //single value
-            }
+            foreach (var group in groups)
+                message.Data[group.Key] = group.Value.Count == 1 && group.Key != "IPv4" && group.Key != "IPv6"
+                    ? (object)group.Value[0] : group.Value.ToArray();
+        }
+
+        private static void AddValue(Dictionary<string, List<string>> groups, NameValuePair pair)
+        {
+            if (!groups.TryGetValue(pair.Name, out var values))
+                groups.Add(pair.Name, values = new List<string>(1));
+            values.Add(pair.Value);
         }
 
     }

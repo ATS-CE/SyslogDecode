@@ -25,7 +25,7 @@ namespace SyslogDecode.TestLoadApp
 
     class Program
     {
-        static void Main(string[] args)
+        static async System.Threading.Tasks.Task Main(string[] args)
         {
             try
             {
@@ -37,7 +37,7 @@ namespace SyslogDecode.TestLoadApp
                 var repeatCount = int.Parse(appStt["repeatCount"]);
 
                 Console.WriteLine($" Sending pcap file '{pcapFile}', repeatCount: {repeatCount}, target IP/port: {targetIp}:{port}");
-                PCapFileProcessor.SendFile(pcapFile, repeatCount, maxEps, int.MaxValue, targetIp, port);
+                await PCapFileProcessor.SendFile(pcapFile, repeatCount, maxEps, int.MaxValue, targetIp, port);
 
             }
             catch (Exception ex)
