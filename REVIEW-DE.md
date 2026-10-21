@@ -1,6 +1,8 @@
 # SyslogDecode: .NET 10, Durchsatz und RFC-Prüfung
 
 Basis: microsoft/SyslogDecode, Commit `5ced7c08911ea8ee9fcc31ea4b9079fb8ead41b5`.
+**Historischer Ausgangsreview mit anschließendem Änderungsprotokoll.** Der konsolidierte Abschlussstand und die Messwerte stehen in `FINAL-REVIEW-DE.md`.
+
 Prüfung: 20. Oktober 2026. Arbeitsbranch im Fork ATS-CE/SyslogDecode; der ursprüngliche Microsoft-Stand bleibt unverändert.
 
 ## Projektumfang
@@ -94,6 +96,8 @@ bleibt ansonsten erhalten. Das ist vor Rollout mit echten Gerätenachrichten zu 
 Der Benchmark liefert fünf Messungen je Nachrichtentyp nach Warmup: Nachrichten/s und zugewiesene
 Bytes/Nachricht. Er misst den Parser inklusive Standard-IP-Extraktion, nicht UDP, Queue oder Persistenz.
 Er ist ein einfacher Vergleichstest, keine BenchmarkDotNet-Studie.
+
+Die folgenden ursprünglichen Befehle sind historisch: Das Validierungsprogramm nutzt inzwischen neue APIs und kompiliert nicht mehr gegen den Originalstand. Für den Vergleich ist jetzt `benchmarks/Benchmark.csproj` mit dem Workflow `windows-benchmark.yml` maßgeblich.
 
 Für einen fairen Vorher/Nachher-Vergleich werden **beide Quellstände unter demselben .NET 10** gebaut.
 Dadurch wird der Effekt der Codeänderungen von einem Runtime-Wechsel getrennt:

@@ -1,0 +1,41 @@
+name: Windows parser comparison
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'benchmarks/**'
+      - '.github/workflows/windows-benchmark.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/SyslogDecode
+          ref: 5ced7c08911ea8ee9fcc31ea4b9079fb8ead41b5
+          path: baseline
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Record environment and build both implementations
+        shell: pwsh
+        run: |
+          dotnet --info
+          Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+          dotnet build benchmarks/Benchmark.csproj -c Release --no-incremental -o current-out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $source = (Resolve-Path baseline/src/SyslogDecode).Path
+          dotnet build benchmarks/Benchmark.csproj -c Release --no-incremental -p:Baseline=true "-p:SyslogSource=$source" -o baseline-out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Measure alternating implementations on the same runner
+        shell: pwsh
+        run: |
+          foreach ($variant in @('baseline','current','current','baseline')) {
+            Write-Output "PROCESS $variant"
+            dotnet "$variant-out/Benchmark.dll"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
