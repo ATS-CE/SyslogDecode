@@ -245,3 +245,48 @@ Neun Testmethoden prüfen gültiges Unicode, Überlängen, Surrogate, ungültige
 abgeschnittene Sequenzen, BOM-Position, MSG-ANY, Byteoffsets und Textkompatibilität.
 Grundlage: RFC 5424 Abschnitte 6, 6.3.3 und 6.4 sowie RFC 3629. Die übrigen
 RFC-3164-/Collector-Prüfungen bleiben separat; Parsed ist kein Konformitätszertifikat.
+
+## Schritt 4 – RFC-3164-Collector
+
+RFC-3164-Zeit wird nicht mehr stillschweigend als UTC ausgegeben. Rfc3164.LocalTimestamp
+enthält die lokale Uhrzeit mit Kind=Unspecified, TimestampText das Original. Das Jahr
+wird als nächstliegendes gültiges Datum im Empfangsjahr oder einem seiner Nachbarjahre
+ermittelt und durch YearInferred kenntlich gemacht. Diese Heuristik kann verspätete oder
+falsch datierte Geräteereignisse nicht eindeutig auflösen. ReceivedOn soll UTC sein;
+Kind=Unspecified wird für diesen Empfangszeitpunkt ausdrücklich als UTC behandelt.
+Fehlt ReceivedOn, bleibt das Jahr unbekannt und eine Diagnose wird ausgegeben.
+
+Ohne Senderzeitzone bleibt Header.Timestamp null (TimeStatus=ZoneUnknown). Eine Zone
+kann pro Quelle über Rfc3164SyslogParser.SenderTimeZoneResolver konfiguriert werden:
+
+```csharp
+var parser = SyslogMessageParser.CreateDefault();
+var bsd = parser.VariantParsers.OfType<Rfc3164SyslogParser>().Single();
+bsd.SenderTimeZoneResolver = raw => TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
+```
+
+In Produktion die Zone anhand der Senderkonfiguration wählen; nicht aus dem Hostnamen
+erraten. Die Zone sollte außerhalb des Callbacks aufgelöst und wiederverwendet werden.
+Nur eine eindeutige lokale Zeit ergibt EstimatedUtc. DST-Lücken und doppelte Uhrzeiten
+werden diagnostiziert; Header.Timestamp bleibt null. Herstellerzeitformate bleiben
+optional über AllowVendorTimestamps lesbar, werden jedoch als VendorTimestamp markiert
+und nicht mehr durch Legacy-Heuristiken als vertrauenswürdige UTC-Werte ausgegeben.
+
+TAG wird als ASCII-alphanumerische Folge gelesen; mehr als 32 Zeichen erzeugen eine
+Diagnose ohne Abschneiden. Rfc3164.Content und Message enthalten den vollständigen
+CONTENT ab dem ersten Nicht-TAG-Zeichen, einschließlich ':', '[PID]' und Leerzeichen.
+Das ist eine bewusste Änderung gegenüber dem alten Trim-/ProcId-Verhalten. AppName ist
+TAG; eine führende numerische [PID] wird zusätzlich als ProcId extrahiert. Bei Datagrammen
+enthält MessageBytes den gesamten ursprünglichen MSG-Teil (TAG + CONTENT).
+
+Ein Datagramm über 1024 Oktette erhält MessageTooLong, wird aber nicht gekürzt oder
+verworfen. Stringeingaben haben keine behauptete ursprüngliche Byteanzahl. Ungültige
+Header, Zeitkomponenten und ASCII-Steuerzeichen im MSG werden diagnostiziert; Rohdaten
+bleiben erhalten. Freie Nachrichten ohne PRI bleiben Unrecognized mit Originalinhalt;
+es werden keine Relay-Header hinzugefügt. Hostnamen werden syntaktisch geprüft, nicht
+gegen DNS/Senderidentität verifiziert. Beliebige historische MSG-Zeichensätze werden
+weiterhin nicht geraten; Message ist deren Anzeigeansicht, RawData die Originalquelle.
+
+Elf zusätzliche Testmethoden prüfen Zeit-/DST-Grenzen, TAG/CONTENT, Bytegrößen, Hostnamen
+und Rohdatenerhalt. Normative Grundlage: RFC 3164 Abschnitte 4.1–4.2. Serialisierung und
+abschließende Durchsatzmessung bleiben gesonderte Aufgaben.

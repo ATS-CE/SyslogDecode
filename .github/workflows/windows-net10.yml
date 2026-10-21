@@ -12,5 +12,5 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet build src/SyslogDecodeAll.sln -c Release
-      - run: dotnet test src/SyslogDecode.Tests/SyslogDecode.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SyslogParsingTests|FullyQualifiedName~RawDataAndStatusTests|FullyQualifiedName~Rfc5424GrammarTests|FullyQualifiedName~Rfc5424EncodingTests"
+      - run: dotnet test src/SyslogDecode.Tests/SyslogDecode.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~SyslogParsingTests|FullyQualifiedName~RawDataAndStatusTests|FullyQualifiedName~Rfc5424GrammarTests|FullyQualifiedName~Rfc5424EncodingTests|FullyQualifiedName~Rfc3164CollectorTests"
       - run: dotnet run --project validation/Validation.csproj -c Release

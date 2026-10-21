@@ -43,7 +43,7 @@ class Program
         Check(SyslogSerializer.Serialize(m) == h + "- text", "NIL SD serializer delimiter");
         Check(SyslogSerializer.Serialize(Parse(h + "-")) == h + "-", "NIL SD no MSG delimiter");
         m = Parse("<34>Dec 31 23:59:59 h app: text");
-        Check(m.Header.Timestamp.Value.Year == 2025 && m.Header.HostName == "h", "BSD short host / year rollover");
+        Check(m.Rfc3164.LocalTimestamp.Value.Year == 2025 && m.Header.Timestamp == null && m.Header.HostName == "h", "BSD short host / year rollover");
         UdpTest();
     }
     static void UdpTest()

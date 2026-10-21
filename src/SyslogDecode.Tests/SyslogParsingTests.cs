@@ -93,13 +93,13 @@ namespace SyslogDecode.Tests
 
             // Parser failure 1
             msg = "<28>Jun 30 14:29:50 Sg2-0102-0201-14T1 snmp#snmp-subagent"; // RFC-3164: no Message element
-            rawMsg = new RawSyslogMessage() { Message = msg };
+            rawMsg = new RawSyslogMessage() { Message = msg, ReceivedOn = new DateTime(2026,6,30,15,0,0,DateTimeKind.Utc) };
             parsedMsg = parser.Parse(rawMsg);
             Assert.IsTrue(parsedMsg.ErrorMessages.Count == 0, "Failed to parse RFC-3164 message without 'Message' element");
 
             // Parser failure 2
             msg = "<28>Jun 30 14:29:50 Sg2-0102-0201-14T1 "; //  RFC-3164: no procId
-            rawMsg = new RawSyslogMessage() { Message = msg };
+            rawMsg = new RawSyslogMessage() { Message = msg, ReceivedOn = new DateTime(2026,6,30,15,0,0,DateTimeKind.Utc) };
             parsedMsg = parser.Parse(rawMsg);
             Assert.IsTrue(parsedMsg.ErrorMessages.Count == 0, "Failed to parse RFC-3164 message without ProcId element");
 

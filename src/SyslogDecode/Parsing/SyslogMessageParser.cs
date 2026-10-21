@@ -131,6 +131,7 @@ namespace SyslogDecode.Parsing
                 }
                 // A non-matching parser is speculative: discard any tentative fields.
                 entry.Header ??= new SyslogHeader();
+                entry.Rfc3164 = null;
                 entry.Header.Timestamp = null;
                 entry.Header.TimestampText = null;
                 entry.Header.Version = null;

@@ -43,6 +43,7 @@ namespace SyslogDecode.Model
         public Facility Facility;
         public Severity Severity;
         public SyslogHeader Header;
+        public Rfc3164Details Rfc3164 { get; internal set; }
         public string Message;
         public MessageEncodingStatus MessageEncoding { get; internal set; }
         /// <summary>Exact RFC 5424 MSG bytes including BOM. HasMessageBytes distinguishes absent/text input.</summary>
