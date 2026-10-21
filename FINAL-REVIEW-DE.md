@@ -59,5 +59,47 @@ nutzt FromDatagram und behält Rohbytes. Der neue Parser leistet zusätzliche Va
 und Metadatenarbeit. Damit ist dies ein Versionsvergleich, kein Vergleich identischer
 Funktionalität. Speicherwerte stammen aus GetAllocatedBytesForCurrentThread.
 
-Messwerte werden nach dem Windows-Lauf ergänzt. Die funktionalen Tests des Implementierungsstands:
+Die funktionalen Tests des Implementierungsstands:
 https://github.com/ATS-CE/SyslogDecode/actions/runs/39543178459
+
+## Messergebnisse vom 21. Oktober 2026
+
+Windows Server 2025 (Build 26100), AMD EPYC 7763, 4 logische CPUs, x64,
+SDK 10.0.402, Runtime 10.0.13, Workstation-GC. Gemessen wurde Commit
+`cc5d277cdf4fb0afa3c750e639b358e0fe435a6c` (Bibliothek unverändert gegenüber `276c337`).
+Je Tabellenzeile: Median aus 10 Runden über zwei Prozesse pro Version.
+
+| Modus | Szenario | Original Nachrichten/s | Aktuell Nachrichten/s | Änderung | Original Bytes/Nachricht | Aktuell Bytes/Nachricht |
+|---|---|---:|---:|---:|---:|---:|
+| text-parse | 3164 | 533247 | 1233094 | +131.2 % | 3264 | 2104 |
+| text-parse | 5424-msg | 999444 | 1344852 | +34.6 % | 2088 | 1648 |
+| text-parse | 5424-sd | 539482 | 739282 | +37.0 % | 3336 | 2656 |
+| text-parse | 5424-escapes | 556137 | 764057 | +37.4 % | 3400 | 2624 |
+| receive-and-parse | 3164 | 496411 | 1076200 | +116.8 % | 3472 | 2368 |
+| receive-and-parse | 5424-msg | 867782 | 1195132 | +37.7 % | 2336 | 1904 |
+| receive-and-parse | 5424-sd | 494606 | 657990 | +33.0 % | 3632 | 2960 |
+| receive-and-parse | 5424-escapes | 511620 | 678047 | +32.5 % | 3712 | 2944 |
+
+In den vier gemessenen Fällen sinken die Allokationen einschließlich Byteübernahme
+um rund 18–32 %. Alle Szenarien sind kurze Nachrichten; große Payloads, viele Parameter,
+Fehlermeldungsfluten oder abweichende Extraktoren können ein anderes Bild ergeben.
+Insbesondere die frühen Textmessungen streuen deutlich (JIT-/Runner-Einflüsse): bei RFC 3164
+aktuell etwa 0,59–1,28 Mio. Nachrichten/s, Original etwa 0,25–0,56 Mio. Deshalb sind die
+Medianwerte Beobachtungen dieses Laufs und keine garantierte Kapazität oder statistische
+Signifikanzbehauptung. RFC-3164-CONTENT/Metadaten und Validierungsumfang unterscheiden
+sich absichtlich zwischen den Versionen. Es gibt keinen Anspruch auf gleiche Ausgabeobjekte.
+
+Rohmesswerte samt Minima/Maxima: `results/windows-2026-10-21.json`.
+Erfolgreicher Vergleichslauf: https://github.com/ATS-CE/SyslogDecode/actions/runs/39545499299
+Die funktionalen Workflows für denselben Commit sind ebenfalls erfolgreich:
+https://github.com/ATS-CE/SyslogDecode/actions/runs/39545499185
+und https://github.com/ATS-CE/SyslogDecode/actions/runs/39545503757.
+
+## Fazit und nächste Betriebsprüfung
+
+Die fünf Korrekturschritte sind implementiert, getestet und im offenen Draft-PR dokumentiert.
+Der Parser zeigt in diesem begrenzten Vergleich eine Verbesserung. Vor einer Produktions-
+Kapazitätsaussage ist ein nativer Windows-Dauerlasttest mit realistischen Nachrichten,
+langsamen Verbrauchern und dem vorgesehenen Speichersink erforderlich: Empfangsrate,
+Verlustquote, Warteschlangenlänge, Prozessspeicher und Latenzen gemeinsam messen.
+Dieser Review setzt weder einen Merge noch eine Produktivfreigabe voraus.
