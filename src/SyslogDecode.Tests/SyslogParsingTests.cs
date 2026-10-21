@@ -57,7 +57,7 @@ namespace SyslogDecode.Tests
             // Test 3: test serializer: serialize entry and compare to original message text
             // Note  that with real messages there maybe mismatches because of slightly different dates formatting by serializer (ex: number of ms in datetime)
             var back2 = SyslogSerializer.Serialize(parsedMsg);
-            Assert.AreEqual(text2, back2, "Serialized entry does not match.");
+            Assert.AreEqual(header + " " + structDataWithEscapedChars + " \uFEFF" + customMsg, back2, "Serialized entry does not match.");
 
             // Test 4 - using Message field with BOM prefix
             // The parser should strip the BOM

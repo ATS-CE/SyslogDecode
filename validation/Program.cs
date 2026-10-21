@@ -40,7 +40,7 @@ class Program
         foreach (var sd in new[] { "[a@1 p=\"unterminated", "[a@1 p=\"x]y\"]", "[a@1][a@1]", "[" + new string('a',33) + "]", "" })
             Check(Parse(h + sd).ErrorMessages.Count > 0, "SD malformed " + sd);
         m = Parse(h + "- text");
-        Check(SyslogSerializer.Serialize(m) == h + "- text", "NIL SD serializer delimiter");
+        Check(SyslogSerializer.Serialize(m) == h + "- \uFEFFtext", "NIL SD serializer delimiter");
         Check(SyslogSerializer.Serialize(Parse(h + "-")) == h + "-", "NIL SD no MSG delimiter");
         m = Parse("<34>Dec 31 23:59:59 h app: text");
         Check(m.Rfc3164.LocalTimestamp.Value.Year == 2025 && m.Header.Timestamp == null && m.Header.HostName == "h", "BSD short host / year rollover");

@@ -290,3 +290,35 @@ weiterhin nicht geraten; Message ist deren Anzeigeansicht, RawData die Originalq
 Elf zusätzliche Testmethoden prüfen Zeit-/DST-Grenzen, TAG/CONTENT, Bytegrößen, Hostnamen
 und Rohdatenerhalt. Normative Grundlage: RFC 3164 Abschnitte 4.1–4.2. Serialisierung und
 abschließende Durchsatzmessung bleiben gesonderte Aufgaben.
+
+## Schritt 5 – RFC-5424-Serialisierung
+
+Serialize und SerializeBytes erzeugen validierte Version-1-Ausgabe. Facility/Severity,
+Headerlängen/ASCII, SD-Namen, Parameter und Unicode-Skalare werden vor Ausgabe geprüft.
+Ungültige Werte führen zu ArgumentException; fehlende Headerwerte werden ausschließlich
+bei null zu NILVALUE. Leere Strings sind keine gültigen Headerfelder. Leere Parameterwerte
+müssen als leerer String statt null angegeben werden. RFC-3164-Ergebnisse und fehlerhafte
+Parsergebnisse werden nicht stillschweigend umgeschrieben; dafür ist ein explizit neu
+aufgebauter, korrigierter RFC-5424-Eintrag erforderlich.
+
+UTC-Zeit wird kulturunabhängig ausgegeben. Local wird über die lokale Systemzeitzone
+normalisiert; DST-Lücken, mehrdeutige lokale Zeiten, Bereichsüberläufe und Unspecified
+werden zurückgewiesen. Maximal sechs Nachkommastellen sind erlaubt: die letzte
+100-ns-Stelle wird abgeschnitten, nicht aufgerundet. Ein unveränderter gültiger
+TimestampText wird beibehalten, einschließlich Offset und -00:00. Nach Änderung des
+Timestamp-Werts wird neu normalisiert. TimestampFormat ist jetzt eine feste Konstante;
+prozessweite benutzerdefinierte Ausgabeformate werden nicht mehr unterstützt.
+
+Text-MSG erhält immer einen UTF-8-BOM. null bedeutet fehlendes MSG, ein leerer String
+bedeutet vorhandenes leeres Unicode-MSG. Ein führendes U+FEFF im Nutztext bleibt zusätzlich
+zum Kodierungsmarker erhalten. SerializeBytes(entry, messageBytes) wählt ausdrücklich
+einen Byte-MSG: ohne BOM sind beliebige Bytes erlaubt, mit BOM ist striktes UTF-8 nötig.
+Diese Überladung ignoriert Message zugunsten des expliziten Bytearguments. Die normale
+Überladung nutzt dagegen immer das aktuelle Message-Feld, niemals veraltete MessageBytes.
+Ein exakter Roundtrip des vollständigen Originaldatagramms erfolgt über Source.RawData;
+Serialisierung normalisiert und validiert bewusst. Die Empfängerfunktion bleibt ohne Relay.
+
+SyslogUdpSender.Send(entry) nutzt die Byte-Serialisierung. Send(string) bleibt die
+unvalidierte Low-Level-Ausgabe bereits fertig aufgebauter Textnachrichten. Zwölf neue
+Testmethoden prüfen Grenzwerte, Unicode, Zeit/Kultur, SD-Escapes, Byte-Roundtrips und die
+tatsächliche UDP-Ausgabe. Grundlage: RFC 5424 Abschnitte 6.2–6.4 und RFC 3629.

@@ -124,7 +124,7 @@ namespace SyslogDecode.Parsing
             }
             return true;
         }
-        private static bool ValidEnterpriseSuffix(string name)
+        internal static bool ValidEnterpriseSuffix(string name)
         {
             int at = name.IndexOf('@');
             if (at < 0) return true; // Registry membership is not inferred from a fixed allow-list.
@@ -205,7 +205,7 @@ namespace SyslogDecode.Parsing
             }
             return number;
         }
-        private static bool TryTimestamp(string text, out DateTime utc, out bool rangeError)
+        internal static bool TryTimestamp(string text, out DateTime utc, out bool rangeError)
         {
             utc = default;
             rangeError = false;

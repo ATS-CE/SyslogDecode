@@ -48,8 +48,8 @@ namespace SyslogDecode.Udp
         /// <param name="entry">SyslogEntry - a SyslogEntry instance.</param>
         public void Send(ParsedSyslogMessage entry)
         {
-            var payload = SyslogSerializer.Serialize(entry);
-            Send(payload);
+            var dgram = SyslogSerializer.SerializeBytes(entry);
+            _udpClient.Send(dgram, dgram.Length, _target);
         }
 
         /// <summary>Sends a plain text syslog message. </summary>
